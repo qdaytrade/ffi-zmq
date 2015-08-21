@@ -8,6 +8,85 @@ local _lib = require('ffi-loader')(module.dir, "zmq.h")
 local _ctx  =  _lib.zmq_ctx_new();
 local zmq = {};
 
+zmq.DONTWAIT = _lib.ZMQ_DONTWAIT;
+zmq.SNDMORE  = _lib.ZMQ_SNDMORE;
+
+-- sock opt -----
+zmq.AFFINITY = _lib.ZMQ_AFFINITY;
+zmq.IDENTITY = _lib.ZMQ_IDENTITY;
+zmq.SUBSCRIBE = _lib.ZMQ_SUBSCRIBE;
+zmq.UNSUBSCRIBE = _lib.ZMQ_UNSUBSCRIBE;
+zmq.RATE = _lib.ZMQ_RATE;
+zmq.RECOVERY_IVL = _lib.ZMQ_RECOVERY_IVL;
+zmq.SNDBUF = _lib.ZMQ_SNDBUF;
+zmq.RCVBUF = _lib.ZMQ_RCVBUF;
+zmq.RCVMORE = _lib.ZMQ_RCVMORE;
+zmq.FD = _lib.ZMQ_FD;
+zmq.EVENTS = _lib.ZMQ_EVENTS;
+zmq.TYPE = _lib.ZMQ_TYPE;
+zmq.LINGER = _lib.ZMQ_LINGER;
+zmq.RECONNECT_IVL = _lib.ZMQ_RECONNECT_IVL;
+zmq.BACKLOG = _lib.ZMQ_BACKLOG;
+zmq.RECONNECT_IVL_MAX = _lib.ZMQ_RECONNECT_IVL_MAX;
+zmq.MAXMSGIZE = _lib.ZMQ_MAXMSGSIZE;
+zmq.SNDHWM = _lib.ZMQ_SNDHWM;
+zmq.RCVHWM = _lib.ZMQ_RCVHWM;
+zmq.MULTICAST_HOPS = _lib.ZMQ_MULTICAST_HOPS;
+zmq.RCVTIMEO = _lib.ZMQ_RCVTIMEO;
+zmq.SNDTIMEO = _lib.ZMQ_SNDTIMEO;
+zmq.LAST_ENDPOINT = _lib.ZMQ_LAST_ENDPOINT;
+zmq.ROUTER_MANDATORY = _lib.ZMQ_ROUTER_MANDATORY;
+zmq.TCP_KEEPALIVE = _lib.ZMQ_TCP_KEEPALIVE;
+zmq.TCP_KEEPALIVE_CNT = _lib.ZMQ_TCP_KEEPALIVE_CNT;
+zmq.TCP_KEEPALIVE_IDLE = _lib.ZMQ_TCP_KEEPALIVE_IDLE;
+zmq.TCP_KEEPALIVE_INTVL = _lib.ZMQ_TCP_KEEPALIVE_INTVL;
+zmq.TCP_ACCEPT_FILTER = _lib.ZMQ_TCP_ACCEPT_FILTER;
+zmq.IMMEDIATE = _lib.ZMQ_IMMEDIATE;
+zmq.XPUB_VERBOSE = _lib.ZMQ_XPUB_VERBOSE;
+zmq.ROUTER_RAW = _lib.ZMQ_ROUTER_RAW;
+zmq.IPV6 = _lib.ZMQ_IPV6;
+zmq.MECHANISM = _lib.ZMQ_MECHANISM;
+zmq.PLAIN_SERVER = _lib.ZMQ_PLAIN_SERVER;
+zmq.PLAIN_USERNAME = _lib.ZMQ_PLAIN_USERNAME;
+zmq.PLAIN_PASSWORD = _lib.ZMQ_PLAIN_PASSWORD;
+zmq.CURVE_SERVER = _lib.ZMQ_CURVE_SERVER;
+zmq.CURVE_PUBLICKEY = _lib.ZMQ_CURVE_PUBLICKEY;
+zmq.CURVE_SECRETKEY = _lib.ZMQ_CURVE_SECRETKEY;
+zmq.CURVE_SERVERKEY = _lib.ZMQ_CURVE_SERVERKEY;
+zmq.PROBE_ROUTER = _lib.ZMQ_PROBE_ROUTER;
+zmq.REQ_CORELATE = _lib.ZMQ_REQ_CORRELATE;
+zmq.REQ_RELAXED = _lib.ZMQ_REQ_RELAXED;
+zmq.CONFLATE = _lib.ZMQ_CONFLATE;
+zmq.ZAP_DOMAIN = _lib.ZMQ_ZAP_DOMAIN;
+zmq.ROUTER_HANDOVER = _lib.ZMQ_ROUTER_HANDOVER;
+zmq.TOS = _lib.ZMQ_TOS;
+zmq.IPC_FILTER_PID = _lib.ZMQ_IPC_FILTER_PID;
+zmq.IPC_FILTER_UID = _lib.ZMQ_IPC_FILTER_UID;
+zmq.IPC_FILTER_GID = _lib.ZMQ_IPC_FILTER_GID;
+zmq.CONNECT_RID = _lib.ZMQ_CONNECT_RID;
+zmq.GSSAPI_SERVER = _lib.ZMQ_GSSAPI_SERVER;
+zmq.GSSAPI_PRINCIPAL = _lib.ZMQ_GSSAPI_PRINCIPAL;
+zmq.GSSAPI_SERVICE_PRINCIPAL = _lib.ZMQ_GSSAPI_SERVICE_PRINCIPAL;
+zmq.GSSAPI_PLAINTEXT = _lib.ZMQ_GSSAPI_PLAINTEXT;
+zmq.HANDSHAKE_IVL = _lib.ZMQ_HANDSHAKE_IVL;
+zmq.IDENTITY_FD = _lib.ZMQ_IDENTITY_FD;
+zmq.SOCKS_PROXY = _lib.ZMQ_SOCKS_PROXY;
+zmq.XPUB_NODROP = _lib.ZMQ_XPUB_NODROP;
+
+-- socket类型
+zmq.PAIR = _lib.ZMQ_PAIR;
+zmq.PUB  = _lib.ZMQ_PUB;
+zmq.SUB  = _lib.ZMQ_SUB;
+zmq.REQ  = _lib.ZMQ_REQ;
+zmq.REP  = _lib.ZMQ_REP;
+zmq.DEALER = _lib.ZMQ_DEALER;
+zmq.ROUTER = _lib.ZMQ_ROUTER;
+zmq.PULL   = _lib.ZMQ_PULL;
+zmq.PUSH   = _lib.ZMQ_PUSH;
+zmq.XPUB   = _lib.ZMQ_XPUB;
+zmq.XSUB   = _lib.ZMQ_XSUB;
+zmq.STREAM = _lib.ZMQ_STREAM;
+
 ffi.cdef[[
 	void* memcpy(void* a, void* b, size_t);
 ]]
@@ -75,7 +154,6 @@ end
 
 local fd = ffi.new(sfd_t, 0);
 local fs = ffi.new(sfd_t, 4);
-
 local function socket_2_poll(s)
 	fd[0] = 0;
 	fs[0] = 4;
@@ -88,8 +166,8 @@ end
 ---- socket object ---------
 local _sock = core.Emitter:extend();
 function _sock:initialize(s, p )
-	self._obj = s;
-	self._poll   = p;
+	self._obj  = s;
+	self._poll = p;
 
 	self._poll:start('r', function(err, event)
 		if err then
@@ -103,6 +181,64 @@ function _sock:initialize(s, p )
 			
 		end
 	end);
+end
+
+
+
+-- 设置opt
+local function _setopt(ct)
+	return function(sock, opt, val)			
+		local t = ct .. '[1]';
+		local v = ffi.new(t, val);
+		local s = ffi.sizeof(t);
+		return 0 == _lib.zmq_setsockopt(sock, opt, v, s);
+	end
+end
+-- 获得opt的函数包装
+local function _getopt(ct)
+	return function(sock, opt)			
+		local t = ct .. '[1]';
+		local v = ffi.new(t, 0);
+		local s = ffi.new('size_t[1]',   ffi.sizeof(t));
+		local r = _lib.zmq_getsockopt(sock, opt, v, s);
+		if r == 0 then
+			return tonumber(v[0]);
+		end		
+		return;
+	end
+end
+
+local function _opt(ct)
+	return {
+		get = _getopt(ct);
+		set = _setopt(ct);
+	};
+end
+
+local opt_handle = 
+{
+	[zmq.HANDSHAKE_IVL] = _opt('int');
+	[zmq.AFFINITY] 		= _opt('uint64_t');	
+};
+
+
+--属性设置
+function _sock:setopt( opt, val)
+	local fs = opt_handle[opt] or {};
+	local f  = fs.set;
+	if f then
+		return f(self._obj, opt, val);
+	end
+end
+
+
+--获得属性
+function _sock:getopt( opt )
+	local fs = opt_handle[opt] or {};
+	local f  = fs.get;
+	if f then
+		return f(self._obj, opt);
+	end
 end
 
 --绑定地址
@@ -138,24 +274,14 @@ function _sock:send(d, flag)
 	m:close();
 	return r;
 end
+
+--关闭socket
+function _sock:close()
+	self._poll:stop();
+	_lib.zmq_close(self._obj);
+end
 -----------------------------------
 
-zmq.DONTWAIT = _lib.ZMQ_DONTWAIT;
-zmq.SNDMORE  = _lib.ZMQ_SNDMORE;
-
--- socket类型
-zmq.PAIR = _lib.ZMQ_PAIR;
-zmq.PUB  = _lib.ZMQ_PUB;
-zmq.SUB  = _lib.ZMQ_SUB;
-zmq.REQ  = _lib.ZMQ_REQ;
-zmq.REP  = _lib.ZMQ_REP;
-zmq.DEALER = _lib.ZMQ_DEALER;
-zmq.ROUTER = _lib.ZMQ_ROUTER;
-zmq.PULL   = _lib.ZMQ_PULL;
-zmq.PUSH   = _lib.ZMQ_PUSH;
-zmq.XPUB   = _lib.ZMQ_XPUB;
-zmq.XSUB   = _lib.ZMQ_XSUB;
-zmq.STREAM = _lib.ZMQ_STREAM;
 
 -- 创建socket
 -- t 需要创建的socket类型
@@ -192,5 +318,9 @@ function zmq.version()
 	v2 = tonumber(v2[0]);
 	v3 = tonumber(v3[0]);
 	return string.format('%d.%d.%d', v1, v2, v3), v1, v2, v3;
+end
+
+function zmq.close()
+	_lib.zmq_ctx_term(ctx);
 end
 return zmq;
