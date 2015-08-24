@@ -28,7 +28,7 @@ zmq.LINGER = _lib.ZMQ_LINGER;
 zmq.RECONNECT_IVL = _lib.ZMQ_RECONNECT_IVL;
 zmq.BACKLOG = _lib.ZMQ_BACKLOG;
 zmq.RECONNECT_IVL_MAX = _lib.ZMQ_RECONNECT_IVL_MAX;
-zmq.MAXMSGIZE = _lib.ZMQ_MAXMSGSIZE;
+zmq.MAXMSGSIZE = _lib.ZMQ_MAXMSGSIZE;
 zmq.SNDHWM = _lib.ZMQ_SNDHWM;
 zmq.RCVHWM = _lib.ZMQ_RCVHWM;
 zmq.MULTICAST_HOPS = _lib.ZMQ_MULTICAST_HOPS;
@@ -54,7 +54,7 @@ zmq.CURVE_PUBLICKEY = _lib.ZMQ_CURVE_PUBLICKEY;
 zmq.CURVE_SECRETKEY = _lib.ZMQ_CURVE_SECRETKEY;
 zmq.CURVE_SERVERKEY = _lib.ZMQ_CURVE_SERVERKEY;
 zmq.PROBE_ROUTER = _lib.ZMQ_PROBE_ROUTER;
-zmq.REQ_CORELATE = _lib.ZMQ_REQ_CORRELATE;
+zmq.REQ_CORRELATE = _lib.ZMQ_REQ_CORRELATE;
 zmq.REQ_RELAXED = _lib.ZMQ_REQ_RELAXED;
 zmq.CONFLATE = _lib.ZMQ_CONFLATE;
 zmq.ZAP_DOMAIN = _lib.ZMQ_ZAP_DOMAIN;
@@ -87,16 +87,6 @@ zmq.XPUB   = _lib.ZMQ_XPUB;
 zmq.XSUB   = _lib.ZMQ_XSUB;
 zmq.STREAM = _lib.ZMQ_STREAM;
 
-ffi.cdef[[
-	void* memcpy(void* a, void* b, size_t);
-]]
-local _memcpy;
-if ffi.os == 'Windows' then
-	local rt = ffi.load('msvcrt');
-	_memcpy = rt.memcpy;
-else
-	_memcpy = ffi.C.memcpy;
-end
 
 --------------------msg_t---------------------------------
 local _msg = core.Object:extend();   --处理消息包
@@ -116,12 +106,12 @@ end
 function _msg:setdata(d)
 	_lib.zmq_msg_close(self._obj);
 	_lib.zmq_msg_init_size(self._obj, #d);
-	_memcpy(_lib.zmq_msg_data(self._obj), ffi.cast('void*', d), math.min(#d, tonumber(_lib.zmq_msg_size(self._obj))));
+	ffi.copy(_lib.zmq_msg_data(self._obj), d, #d);
 end
 
 -- 获取数据
 function _msg:getdata()
-	local ds = tonumber(_lib.zmq_msg_size(self._obj));
+	local ds = self:size();
 	if ds <= 0 then return '' end;
 
 	return ffi.string(_lib.zmq_msg_data(self._obj), _lib.zmq_msg_size(self._obj));
@@ -173,12 +163,13 @@ function _sock:initialize(s, p )
 		if err then
 			self:emit('error', err);			
 		else
-			while true do
-				local d = self:recv(_lib.ZMQ_DONTWAIT);
-				if d == nil then break; end
+			while true do				
+				local d, r= self:recv(_lib.ZMQ_DONTWAIT);
+				if d == nil then 
+					break; 
+				end
 				self:emit('data', d);	
 			end
-			
 		end
 	end);
 end
@@ -194,6 +185,14 @@ local function _setopt(ct)
 		return 0 == _lib.zmq_setsockopt(sock, opt, v, s);
 	end
 end
+
+-- for char*
+local function _setopt_str()
+	return function(sock, opt, val)
+		local s = #val;
+		return 0 == _lib.zmq_setsockopt(sock, opt, val, s);
+	end
+end
 -- 获得opt的函数包装
 local function _getopt(ct)
 	return function(sock, opt)			
@@ -207,8 +206,28 @@ local function _getopt(ct)
 		return;
 	end
 end
+local function _getopt_str()
+	return function( sock, opt )
+		local maxlen = 1024;
+		local v = ffi.new('uint8_t[?]', maxlen);
+		local s = ffi.new('size_t[1]',  maxlen);
+		local r = _lib.zmq_getsockopt(sock, opt, v, s);
+		if r == 0 then
+			return ffi.string(v, s[0]);
+		end
+		return;
+	end
+end
+
+
 
 local function _opt(ct)
+	if ct == 'char*' then
+		return {
+			get = _getopt_str();
+			set = _setopt_str();
+		}
+	end
 	return {
 		get = _getopt(ct);
 		set = _setopt(ct);
@@ -216,9 +235,58 @@ local function _opt(ct)
 end
 
 local opt_handle = 
-{
-	[zmq.HANDSHAKE_IVL] = _opt('int');
+{	
 	[zmq.AFFINITY] 		= _opt('uint64_t');	
+	[zmq.BACKLOG]		= _opt('int');
+	[zmq.CONNECT_RID]	= _opt('char*');
+	[zmq.CONFLATE]		= _opt('int');
+	[zmq.CURVE_PUBLICKEY]=_opt('char*');
+	[zmq.CURVE_SECRETKEY]=_opt('char*');
+	[zmq.CURVE_SERVER]  = _opt('int');
+	[zmq.CURVE_SERVERKEY]= _opt('char*');
+	[zmq.GSSAPI_PLAINTEXT] = _opt('int');
+	[zmq.GSSAPI_PRINCIPAL] = _opt('char*');
+	[zmq.GSSAPI_SERVER]    = _opt('int');
+	[zmq.GSSAPI_SERVICE_PRINCIPAL] = _opt('char*');
+	[zmq.HANDSHAKE_IVL]    = _opt('int');
+	[zmq.IDENTITY]	   = _opt('char*');
+	[zmq.IMMEDIATE] 	   = _opt('int');	
+	[zmq.IPV6]		  	   = _opt('int');
+	[zmq.LINGER]		   = _opt('int');
+	[zmq.MAXMSGSIZE]	   = _opt('int64_t');
+	[zmq.MULTICAST_HOPS]   = _opt('int');
+	[zmq.PLAIN_PASSWORD]   = _opt('char*');
+	[zmq.PLAIN_SERVER]	   = _opt('int');
+	[zmq.PLAIN_USERNAME]   = _opt('char*');
+	[zmq.PROBE_ROUTER]	   = _opt('int');
+	[zmq.RATE]			   = _opt('int');
+	[zmq.RCVBUF]		   = _opt('int');
+	[zmq.RCVHWM]		   = _opt('int');
+	[zmq.RCVTIMEO]		   = _opt('int');
+	[zmq.RECONNECT_IVL]	   = _opt('int');
+	[zmq.RECONNECT_IVL_MAX]= _opt('int');
+	[zmq.RECOVERY_IVL]	   = _opt('int');
+	[zmq.REQ_CORRELATE]	   = _opt('int');
+	[zmq.REQ_RELAXED]	   = _opt('int');
+	[zmq.ROUTER_HANDOVER]  = _opt('int');
+	[zmq.ROUTER_MANDATORY] = _opt('int');
+	[zmq.ROUTER_RAW]	   = _opt('int');
+	[zmq.SNDBUF]		   = _opt('int');
+	[zmq.SNDHWM]		   = _opt('int');
+	[zmq.SNDTIMEO]		   = _opt('int');
+	[zmq.SUBSCRIBE]		   = _opt('char*');
+	[zmq.TCP_ACCEPT_FILTER]= _opt('char*');
+	[zmq.TCP_KEEPALIVE]		   = _opt('int');
+	[zmq.TCP_KEEPALIVE_CNT]= _opt('int');
+	[zmq.TCP_KEEPALIVE_IDLE]= _opt('int');
+	[zmq.TCP_KEEPALIVE_INTVL]= _opt('int');
+	[zmq.TOS]		   = _opt('int');
+	[zmq.UNSUBSCRIBE]	= _opt('char*');
+	[zmq.XPUB_VERBOSE]	   = _opt('int');
+	[zmq.ZAP_DOMAIN]	   = _opt('char*');
+
+	--only get
+	[zmq.RCVMORE]		   = _opt('int');
 };
 
 
@@ -254,25 +322,47 @@ end
 --收数据
 --flag 可选zmq.DONTWAIT 
 function _sock:recv(flag)
-	local m = _msg:new();
-	local r = m:recv(self._obj, flag or 0);
-	if r <= 0 then		
+	local t = {};
+	flag = flag or 0;
+	while(true) do
+		local m = zmq.msg();
+		local r = m:recv(self._obj, flag);
+		if r <= 0 then		
+			m:close();
+			return nil, r;
+		end
+		table.insert(t, m:getdata());
 		m:close();
-		return nil;
+
+		if self:getopt(zmq.RCVMORE) ~= 1 then
+			break;
+		end
 	end
-	local d = m:getdata();
-	m:close();
-	return d;
+	return t;
 end
 
 --发数据
 --d 可以是string，也可以是table 
 --flag zmq.DONTWAIT or zmq.SNDMORE 
 function _sock:send(d, flag)
-	local m = _msg:new(d);
-	local r = m:send(self._obj, flag or 0);
-	m:close();
-	return r;
+	flag = flag or 0;
+	if type(d) == 'table' then --发送多个数据
+		local m = zmq.msg();
+		local f = bit.bor(flag, zmq.SNDMORE);
+		local n = #d;
+		for i=1,n - 1 do
+			m:setdata(tostring(d[i]));
+			m:send(self._obj, f);
+		end
+		m:setdata(d[n]);
+		m:send(self._obj, flag);
+		m:close();
+	else
+		local m = zmq.msg(d);
+		local r = m:send(self._obj, flag);
+		m:close();
+		return r;
+	end
 end
 
 --关闭socket
