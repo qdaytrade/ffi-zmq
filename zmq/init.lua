@@ -5,8 +5,8 @@ local uv  = require "uv"
 local core = require('core');
 
 local _lib = require('ffi-loader')(module.dir, "zmq.h")
-local _ctx  =  _lib.zmq_ctx_new();
-local zmq = {};
+local _ctx =  _lib.zmq_ctx_new();
+local zmq  = {};
 
 zmq.DONTWAIT = _lib.ZMQ_DONTWAIT;
 zmq.SNDMORE  = _lib.ZMQ_SNDMORE;
@@ -86,6 +86,21 @@ zmq.PUSH   = _lib.ZMQ_PUSH;
 zmq.XPUB   = _lib.ZMQ_XPUB;
 zmq.XSUB   = _lib.ZMQ_XSUB;
 zmq.STREAM = _lib.ZMQ_STREAM;
+
+
+--monitor类型
+zmq.EVENT_CONNECTED       = _lib.ZMQ_EVENT_CONNECTED      ;
+zmq.EVENT_CONNECT_DELAYED = _lib.ZMQ_EVENT_CONNECT_DELAYED;
+zmq.EVENT_CONNECT_RETRIED = _lib.ZMQ_EVENT_CONNECT_RETRIED;
+zmq.EVENT_LISTENING       = _lib.ZMQ_EVENT_LISTENING      ;
+zmq.EVENT_BIND_FAILED     = _lib.ZMQ_EVENT_BIND_FAILED    ;
+zmq.EVENT_ACCEPTED        = _lib.ZMQ_EVENT_ACCEPTED       ;
+zmq.EVENT_ACCEPT_FAILED   = _lib.ZMQ_EVENT_ACCEPT_FAILED  ;
+zmq.EVENT_CLOSED          = _lib.ZMQ_EVENT_CLOSED         ;
+zmq.EVENT_CLOSE_FAILED    = _lib.ZMQ_EVENT_CLOSE_FAILED   ;
+zmq.EVENT_DISCONNECTED    = _lib.ZMQ_EVENT_DISCONNECTED   ;
+zmq.EVENT_MONITOR_STOPPED = _lib.ZMQ_EVENT_MONITOR_STOPPED;
+zmq.EVENT_ALL             = _lib.ZMQ_EVENT_ALL            ;
 
 
 --------------------msg_t---------------------------------
@@ -319,6 +334,9 @@ function _sock:connect(addr)
 	return 0 == _lib.zmq_connect(self._obj, addr);
 end
 
+function _sock:disconnect(addr)
+	return 0 == _lib.zmq_disconnect(self._obj, addr or '');
+end
 --收数据
 --flag 可选zmq.DONTWAIT 
 function _sock:recv(flag)
@@ -364,6 +382,43 @@ function _sock:send(d, flag)
 		return r;
 	end
 end
+
+
+--[[ ！！！！！！！！！！！！ it dont work ！！！！！！！！！！！！！！
+local _monitor_id = 1;
+
+--监控当前socket
+--同时只能设置一个监控函数，如果多次调用，之前设置的监控函数会被取消
+function _sock:monitor(events, f)
+	self:monitor_close();
+
+	if not self._monitor_id then
+		local addr = string.format('inproc://socket_monitor_%d', _monitor_id);
+		_monitor_id = _monitor_id + 1;
+
+		
+		if 0 ~= _lib.zmq_socket_monitor(self._obj, addr, events) then
+			return nil;
+		end
+		self._monitor_id = addr;
+	end
+
+	local _ms  = zmq.socket(zmq.PAIR);
+	_ms:on('data', function(d)
+		f(d);
+	end);
+
+	self._monitor = _ms;
+	return _ms;
+end
+
+--关闭监控
+function _sock:monitor_close()
+	if self._monitor then
+		self._monitor:close();
+	end
+end
+]]
 
 --关闭socket
 function _sock:close()
