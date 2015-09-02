@@ -108,12 +108,10 @@ local _msg = core.Object:extend();   --处理消息包
 
 function _msg:initialize(d)	
 	self._obj = ffi.new('zmq_msg_t');
+	_lib.zmq_msg_init(self._obj);
 
 	if d then
-		_lib.zmq_msg_init(self._obj);
 		self:setdata(d);
-	else
-		_lib.zmq_msg_init(self._obj);
 	end
 end
 
