@@ -5,8 +5,8 @@ local uv  = require "uv"
 local core = require('core');
 
 local _lib = require('ffi-loader')(module.dir, "zmq.h")
-local _ctx =  _lib.zmq_ctx_new();
-local zmq  = {};
+local _ctx  =  _lib.zmq_ctx_new();
+local zmq = {};
 
 zmq.DONTWAIT = _lib.ZMQ_DONTWAIT;
 zmq.SNDMORE  = _lib.ZMQ_SNDMORE;
@@ -108,8 +108,8 @@ local _msg = core.Object:extend();   --处理消息包
 
 function _msg:initialize(d)	
 	self._obj = ffi.new('zmq_msg_t');
-	_lib.zmq_msg_init(self._obj);
 
+	_lib.zmq_msg_init(self._obj);
 	if d then
 		self:setdata(d);
 	end
@@ -174,6 +174,7 @@ function _sock:initialize(s, p )
 
 	self._poll:start('r', function(err, event)
 		if err then
+			print(os.date(), 'error->', err);
 			self:emit('error', err);			
 		else
 			while true do				
@@ -181,7 +182,7 @@ function _sock:initialize(s, p )
 				if d == nil then 
 					break; 
 				end
-				self:emit('data', d);	
+				self:emit('data', d, self);	
 			end
 		end
 	end);
@@ -322,6 +323,9 @@ function _sock:getopt( opt )
 	end
 end
 
+function _sock:subscribe(c)
+	self:setopt(zmq.SUBSCRIBE, c);
+end
 --绑定地址
 function _sock:bind(addr)
 	return 0 == _lib.zmq_bind(self._obj, addr);
@@ -382,7 +386,6 @@ function _sock:send(d, flag)
 end
 
 
---[[ ！！！！！！！！！！！！ it dont work ！！！！！！！！！！！！！！
 local _monitor_id = 1;
 
 --监控当前socket
@@ -416,7 +419,6 @@ function _sock:monitor_close()
 		self._monitor:close();
 	end
 end
-]]
 
 --关闭socket
 function _sock:close()
@@ -439,15 +441,17 @@ function zmq.socket(t)
 	return _sock:new(s, p);
 end
 
-function zmq.bind_socket(t, addr)
+function zmq.bind_socket(t, addr, f)
 	local s, e1, e2 = zmq.socket(t);
 	if not s then
 		return nil, e1, e2;
 	end
+	if f then
+		s:on('data', f);
+	end
 	s:bind(addr);
 	return s;
 end
-
 
 --返回版本号
 function zmq.version()
@@ -463,7 +467,34 @@ function zmq.version()
 	return string.format('%d.%d.%d', v1, v2, v3), v1, v2, v3;
 end
 
+function zmq.error()	
+	local errno = _lib.zmq_errno();
+	local errmsg= ffi.string(_lib.zmq_strerror(errno));
+	return errno, errmsg;
+end
+
+function zmq.errmsg(errno)
+	return ffi.string(_lib.zmq_strerror(errno or 0));
+end
+
+--close zmq context
 function zmq.close()
-	_lib.zmq_ctx_term(ctx);
+	_lib.zmq_ctx_term(_ctx);
+end
+
+zmq.IO_THREADS          = _lib.ZMQ_IO_THREADS;
+zmq.MAX_SOCKETS         = _lib.ZMQ_MAX_SOCKETS;
+zmq.SOCKET_LIMIT        = _lib.ZMQ_SOCKET_LIMIT;
+zmq.THREAD_PRIORITY     = _lib.ZMQ_THREAD_PRIORITY;
+zmq.THREAD_SCHED_POLICY = _lib.ZMQ_THREAD_SCHED_POLICY;
+
+--set zmq context option value
+function zmq.setopt(opt, val)
+	return 0 == _lib.zmq_ctx_set(_ctx, opt, val);
+end
+
+--get zmq context option value
+function zmq.getopt(opt)
+	return _lib.zmq_ctx_get(_ctx, opt);
 end
 return zmq;

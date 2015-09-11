@@ -7,14 +7,19 @@ local encode = require('msgpack').encode;
 local decode = require('msgpack').decode;
 
 local rpc_svr = core.Emitter:extend();
-function rpc_svr:initialize(addr)	
-	self._sock = zmq.bind_socket(zmq.PULL, addr);
-	self._sock:on('data', utils.bind(self._onData, self))
+
+-- linkaddr bind listen addr
+-- dispaddr send response addr
+function rpc_svr:initialize(linkaddr, dispaddr)	
+	self._sock = zmq.bind_socket(zmq.PULL, linkaddr,
+															utils.bind(self._onData, self))
+	self._sendsock = zmq.bind_socket(zmq.PUB, dispaddr);
 
 	self._clients = {};
 	self._links   = {};
 
 	self._cid_index = 1;	--客户端ID记录
+	self._cnt = 0;
 end
 
 
@@ -27,19 +32,24 @@ end
 --  cmd  --  调用的方法名称
 --  rid  --  请求的上下文ID
 function rpc_svr:_onData(d)
-	local req = decode(d[1]);
+	local cname = d[1];
+	local req = decode(d[2]);
 
-	--p(os.date(), 'call->', req);
+	self._cnt = self._cnt  + 1;
+	if math.fmod(self._cnt, 1000)  == 0 then
+		p(os.date(), 'call count->', self._cnt);
+	end
+
+--	p(os.date(), 'call->', cname,  req);
 	local ctx = req.ctx;
 	local p   = req.p;
 
-	local cs = self._clients[ctx.cid or ''];
 	local fn = self[ctx.cmd];
 	local res= nil;
 	if fn then
 		local e = {
 			ctx = ctx;
-			cs  = cs;
+			cname = cname;
 		};
 
 		setfenv(fn, setmetatable(e, {__index = _G}));
@@ -56,9 +66,8 @@ function rpc_svr:_onData(d)
 		};
 	end
 
-	cs = cs or self._clients[ctx.cid or ''];
-	if res and cs then
-		cs:send(encode(res));
+	if res then
+		self._sendsock:send({cname, encode(res)});
 	end
 end
 
@@ -69,16 +78,6 @@ function rpc_svr:_sys_connect(cbaddr)
 	local cid = string.format('c_%d', self._cid_index);
 	self._cid_index = self._cid_index + 1;
 
-	local s = self._links[cbaddr];
-	if s == nil then
-		s = zmq.socket(zmq.PUSH);
-		self._links[cbaddr] = s;
-		s:connect(cbaddr);
-	else
-		p('use old client socket');
-	end
-
-	self._clients[cid] = s;
 	ctx.cid = cid;
 	return cid;
 end
@@ -87,29 +86,41 @@ exports.server = rpc_svr;
 
 ------------------ client class --------------------
 local rpc_client = core.Emitter:extend();
-function rpc_client:initialize(svraddr, bindaddr, cbaddr)
-	self._sock = zmq.socket(zmq.PUSH, addr);
-  self._listen = zmq.bind_socket(zmq.PULL, bindaddr);	
-	self._listen:on('data', utils.bind(self._onData, self))
+function rpc_client:initialize(svraddr, resaddr, cname)
+	self._sock   = zmq.socket(zmq.PUSH);
+  self._resock = zmq.socket(zmq.SUB);	
+	self._resock:on('data', utils.bind(self._onData, self))
+
+	self._resock:connect(resaddr);
+	self._resock:setopt(zmq.SUBSCRIBE, cname)
 
 	self._sock:connect(svraddr);
+
+	self._name = cname;
 	self._rid = 1;
 	self._callback = {};
 
-	self:call('_sys_connect', cbaddr, function(cid)
-		p('get cid->', cid);
+	self:call('_sys_connect', function(cid)
 		self._cid = cid;
 		self:emit('connected')
 	end)
 end
 
-function rpc_client:_onData(d)
-	local res = decode(d[1]);
+function rpc_client:close()
+	self._sock:close();
+	self._resock:close();
+end
+function rpc_client:_onData(d)	
+	local cname = d[1];
+  if cname ~= self._name then
+		p(os.date(), 'is not my data->', cname); 
+	end
+	local res = decode(d[2]);
 
 	local ctx = res.ctx;
 	local r   = res.r;
 
-	--p('return ->', res);
+	--p('return ->', cname, res);
 	if ctx.ret == 0 then 	--suc
 		local f = self._callback[ctx.rid or 0];
 		if f then
@@ -130,12 +141,12 @@ function rpc_client:call(name, ...)
 	local ctx = 
 	{
 		cmd = name;
-		cid = self._cid;
 		rid = self._rid;
 	};
 	self._rid  = self._rid + 1;
 
-	self._sock:send(encode({ctx = ctx, p = arg}));
+	--self._sock:send({self._name, encode({ctx = ctx, p = arg})}, zmq.DONTWAIT);
+	self._sock:send({self._name, encode({ctx = ctx, p = arg})});
 end
 
 exports.client = rpc_client;
